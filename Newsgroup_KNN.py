@@ -1,5 +1,7 @@
+# Import dataset 
 from sklearn.datasets import fetch_20newsgroups
 
+# Refactoring categories into the broad topics
 science_categories = ['sci.crypt', 'sci.electronics', 'sci.med', 'sci.space'] #0
 religion_categories = ['talk.religion.misc','alt.atheism','soc.religion.christian']  #1
 politics_categories = [ 'talk.politics.misc', 'talk.politics.guns','talk.politics.mideast' ] #2
@@ -15,6 +17,7 @@ newsgroups_train_original = fetch_20newsgroups(subset='train', categories=all_ca
 
 import re
 
+#Regex expression to remove email addresses
 EMAIL_REGEX = re.compile(r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)")
 
 convert_target_hash = {}
@@ -57,6 +60,7 @@ from nltk.tag.perceptron import PerceptronTagger
 import numpy as np
 import string
 
+# To lemmatize tokens
 class LemmaTokenizer(object):
     def __init__(self):
         self.wnl = WordNetLemmatizer()
@@ -70,8 +74,7 @@ class LemmaTokenizer(object):
         nouns = [word for word,pos in tagged if pos == 'NN'or pos == 'NNP']
         return nouns
 
-
-
+# Stopwords extracted from text as analysed by count vectoriser
 other_stopwords = ['article','bit','book','chip','day','doe','ha','hand','line','lot','number','organization',
                    'person','place','point','problem','question','time','university','version','wa','way',
                    'week','work','world','year','u']
@@ -96,6 +99,7 @@ for i in range (0,40):
 
 dist = np.sum(train_features, axis=0)
 
+# Newsgroups test dataset
 newsgroups_test = fetch_20newsgroups(subset='test', remove=('footers'), categories=all_categories)
 
 for i in range(0,len(newsgroups_test.data)):
@@ -123,10 +127,12 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import Normalizer
 
+# Tf-IDF Vectoriser to generate features set 
 vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(), stop_words='english', use_idf=True)
 vectors = vectorizer.fit_transform(newsgroups_train_original.data)
 vectors_test = vectorizer.transform(newsgroups_test.data)
 
+# Dimensionality reduction using SVD for effective KNN run
 svd = TruncatedSVD(1000)
 lsa = make_pipeline(svd, Normalizer(copy=False))
 vectors = lsa.fit_transform(vectors)
@@ -140,13 +146,14 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier
 
+# K- Nearest Neighbors
 knn = KNeighborsClassifier(n_neighbors=10, algorithm='brute', p=2)
 knn.fit(vectors, newsgroups_train_original.target)
 knn_pred_train = knn.predict(vectors)
 knn_pred_test = knn.predict(vectors_test)
 knn_f1 = metrics.f1_score(newsgroups_test.target, knn_pred_test, average='macro')
 
-
+# Multinomial Naive Bayes
 mnb = MultinomialNB(alpha=.01)
 mnb.fit(vectors, newsgroups_train_original.target)
 mnb_pred_train = mnb.predict(vectors)
@@ -174,6 +181,7 @@ pred_1_test = np.vstack((knn_pred_test, mnb_pred_test, rfc_pred_test, svm_pred_t
 pred_1_train = pred_1_train.T
 pred_1_test = pred_1_test.T
 
+# Feeding into MLP
 nn = Classifier(
 layers=[
 Layer("Sigmoid", units=100),
@@ -189,8 +197,9 @@ y_example = nn.predict(pred_1_test)
 y_test.shape
 u = nn.score(y_test, y_example)
 
+# Accuracy of MLP
 from sklearn.metrics import accuracy_score
-accuracy_score(y_example, y_test)
+print (accuracy_score(y_example, y_test))
 
 target_names=[0,1,2,3,4,5]
 newsgroups_test.target = newsgroups_test.target.reshape(7532,1)
