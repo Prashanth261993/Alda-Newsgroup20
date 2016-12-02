@@ -40,6 +40,8 @@ convert_target_hash[17] = 2
 convert_target_hash[18] = 2
 convert_target_hash[19] = 1
 
+# Mapping the target labels of training data from 20 to 6 categories
+
 for i in range(0,len(newsgroups_train_original.data)):
     split_words = newsgroups_train_original.data[i].split('\n')
     newsgroups_train_original.data[i] = ""
@@ -62,6 +64,8 @@ import string
 
 nltk.download('wordnet')
 
+# Tokenizer that handles Lemmatization, POS tagging, Stopwords removal
+
 class LemmaTokenizer(object):
     def __init__(self):
         self.wnl = WordNetLemmatizer()
@@ -75,21 +79,8 @@ class LemmaTokenizer(object):
         nouns = [word for word,pos in tagged if pos == 'NN'or pos == 'NNP']
         return nouns
 
-
-
-other_stopwords = ['article','bit','book','chip','day','doe','ha','hand','line','lot','number','organization',
-                   'person','place','point','problem','question','time','university','version','wa','way',
-                   'week','work','world','year','u']
+# Stopwords, TF vectorizer
 stopwords_set = set(stopwords.words('english'))
-stopwords_set.update(other_stopwords)
-
-for i in range(0,len(newsgroups_train_original.data)):
-    split_words = word_tokenize(newsgroups_train_original.data[i])
-    newsgroups_train_original.data[i] = ""
-    for j in range(0, len(split_words)):
-        if split_words[j].lower() not in stopwords_set:
-            newsgroups_train_original.data[i] += split_words[j] + ' '
-
 count_vect = CountVectorizer(tokenizer=LemmaTokenizer(), decode_error="ignore", stop_words=stopwords_set, max_features=100)
 
 # To transform words into features and correpsonding counts
@@ -101,20 +92,24 @@ dist = np.sum(train_features, axis=0)
 for tag, count in zip(vocab, dist):
     print (count+',', tag)
 
+#Added new stopwords based on words that occur commomly across all documents, but don't add any weightage to classification model
+other_stopwords = ['article','bit','book','chip','day','doe','ha','hand','line','lot','number','organization',
+                   'person','place','point','problem','question','time','university','version','wa','way',
+                   'week','work','world','year','u']
 
-#print filter(lambda w: not w in stopwords_set,newsgroups_train.data[1].split())
+stopwords_set.update(other_stopwords)
 
-"""
-is_noun = lambda pos: pos[:2] == 'NN'
-# do the nlp stuff
-tokenized = nltk.word_tokenize(lines)
-nouns = [word for (word, pos) in nltk.pos_tag(tokenized) if is_noun(pos)]
-
-print nouns
->>> ['lines', 'string', 'words']
-"""
+# Final feature extraction of nouns from each document excluding the updated stopwords
+for i in range(0,len(newsgroups_train_original.data)):
+    split_words = word_tokenize(newsgroups_train_original.data[i])
+    newsgroups_train_original.data[i] = ""
+    for j in range(0, len(split_words)):
+        if split_words[j].lower() not in stopwords_set:
+            newsgroups_train_original.data[i] += split_words[j] + ' '
 
 newsgroups_test = fetch_20newsgroups(subset='test', remove=('footers'), categories=all_categories)
+
+# Mapping the target labels of training data from 20 to 6 categories
 
 for i in range(0,len(newsgroups_test.data)):
     split_words = newsgroups_test.data[i].split('\n')
@@ -123,6 +118,8 @@ for i in range(0,len(newsgroups_test.data)):
     for j in range(0,len(split_words)):
         if EMAIL_REGEX.search(split_words[j]) is None:
             newsgroups_test.data[i] += split_words[j] +'\n'
+
+# Final feature extraction of nouns from each document excluding the updated stopwords
 
 for i in range(0,len(newsgroups_test.data)):
     split_words = word_tokenize(newsgroups_test.data[i])
@@ -136,13 +133,17 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn import metrics
 
+# Creation of Tf-IDF vectors and predicting using MNB
 vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer())
 vectors = vectorizer.fit_transform(newsgroups_train_original.data)
 vectors_test = vectorizer.transform(newsgroups_test.data)
 multinomial_clf = MultinomialNB(alpha=.01)
 multinomial_clf.fit(vectors, newsgroups_train_original.target)
-pred = multinomial_clf.predict(vectors_test)
-metrics.f1_score(newsgroups_test.target, pred, average='macro')
+mlb_pred_test = multinomial_clf.predict(vectors_test)
+mlb_pred_train = multinomial_clf.predict(vectors)
+metrics.f1_score(newsgroups_test.target, mlb_pred_test, average='macro')
+
+# Prints top 20 features under each category
 
 def show_top20(classifier, vectorizer, categories):
     feature_names = np.asarray(vectorizer.get_feature_names())
@@ -150,11 +151,11 @@ def show_top20(classifier, vectorizer, categories):
         top20 = np.argsort(classifier.coefs_[i])[-10:]
         print("%s: %s" % (category, " ".join(feature_names[top20])))
 
-# further considerations for stopwords: could, like, subject, lines, would, nntp, posting, edu, one
+# Confusion Matrix of actual vs predicted newsgroup articles based on MNB
 
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
-cm = confusion_matrix(newsgroups_test.target, pred)
+cm = confusion_matrix(newsgroups_test.target, mlb_pred_test)
 
 norm_conf = []
 for i in cm:
@@ -193,10 +194,14 @@ df_cm = pd.DataFrame(cm, index = [i for i in final_categories],
 plt.figure(figsize = (10,7))
 sn.heatmap(df_cm, annot=True, fmt='g')
 
+# Tried other models such as MLP, Random Forest, SVM etc.
+
+#MLP
 from sklearn.neural_network import MLPClassifier
 clf = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(15,), random_state=1, max_iter= 100000)
 clf.fit(vectors, newsgroups_train_original.target)
 
+#Random Forest
 from sklearn.ensemble import RandomForestClassifier
 forest = RandomForestClassifier(n_estimators = 100)
 
@@ -205,69 +210,18 @@ print "Fitting a random forest to labeled training data..."
 forest = forest.fit(vectors,newsgroups_train_original.target)
 result = forest.predict(vectors_test)
 
+#SVM
 from sklearn.linear_model import SGDClassifier
-text_clf = Pipeline([('vect', CountVectorizer()),
-                      ('tfidf', TfidfTransformer()),
-                      ('clf', SGDClassifier(loss='hinge', penalty='l2',
-                                            alpha=1e-3, n_iter=5, random_state=42)),
- ])
 svm_clf = SGDClassifier(loss='hinge', penalty='l2', alpha=1e-3, n_iter=5, random_state=42)
 svm_clf.fit(vectors, newsgroups_train_original.target)
 predicted = svm_clf.predict(vectors_test)
 
-
-# Combining multiple classifiers
-
-multinomial_clf.fit(vectors, newsgroups_train_original.target)
-pred_train = multinomial_clf.predict(vectors)
-
-knn_train.fit(vectors, newsgroups_train_original.target)
-predicted_values_train = svm_clf.predict(vectors)
-
-svm_clf.fit(vectors, newsgroups_train_original.target)
-predicted_train = svm_clf.predict(vectors)
-
-
-
-y_train = [[[] for i in range(5)] for i in range(11314)]
-
-for x in range(0,11314):
-    y_train[x][0] = pred_train[x]
-    y_train[x][1] = svm_train[x]
-    y_train[x][2] = knn_train[x]
-    y_train[x][3] = rtree_train[x]
-    y_train[x][4] = mlp_train[x]
-
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-scaler.fit(y_train)
-y_train = scaler.transform(y_train)
-
-clf = MLPClassifier(solver='adam', alpha=1e-5, hidden_layer_sizes=(5,2), random_state=42, max_iter= 100000)
-clf.fit(y_train, newsgroups_train_original.target)
-
-predicted = svm_clf.predict(vectors_test)
-
-pred = multinomial_clf.predict(vectors_test)
-
-predicted_values = svm_clf.predict(vectors_test)
-
-y_test = [[[] for i in range(5)] for i in range(7532)]
-
+#KNN
 from sklearn.neighbors import KNeighborsClassifier
-
 knn = KNeighborsClassifier(n_neighbors=10, algorithm='brute', p=2)
 knn.fit(vectors, newsgroups_train_original.target)
 knn_pred_train = knn.predict(vectors)
 knn_pred_test = knn.predict(vectors_test)
 knn_f1 = metrics.f1_score(newsgroups_test.target, knn_pred_test, average='macro')
 
-for x in range(0,7532):
-    y_test[x][0] = pred_test[x]
-    y_test[x][1] = svm_test[x]
-    y_test[x][2] = knn_test[x]
-    y_test[x][3] = rtree_test[x]
-    y_test[x][4] = mlp_test[x]
 
-y_test = scaler.transform(y_test)
-final_prediction = clf.predict(y_test)
